@@ -35,6 +35,13 @@ Here's how I went about extracting the first level of Half-Life from my Steam li
 bsp2obj -o hl_c1a0 -m /Users/measuredweighed/Library/Application\ Support/Steam/steamapps/common/Half-Life/valve/maps/c1a0.bsp -c /Users/measuredweighed/Library/Application\ Support/Steam/steamapps/common/Half-Life/valve/gfx/palette.lmp
 ```
 
+## Converting a external bsp file:
+You can now convert external bsp files to obj using the `-p` argument. This has only been tested with Quake 1 maps.
+
+```
+bsp2obj -o jctest -p ".\PAK0.PAK" -e ".\maps\jctest.bsp" -c "gfx/palette.lmp"
+```
+
 ## Future work
 There are a number of things I'd like to improve when it comes to BSP2OBJ. Below I've compiled a list of future to-dos. Pull requests are very much welcome, even if they don't concern items on this list:
 

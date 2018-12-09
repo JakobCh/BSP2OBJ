@@ -82,17 +82,30 @@ class BSPFormat(Enum):
     HL = 3 # Half-Life
 
 class BSP(object):
-    def __init__(self, stream, pak, palettePath):
-        self.stream = stream
+    def __init__(self, stream, pak, palettePath, extBspStream=None):
+        if extBspStream is not None:
+            self.stream = extBspStream
+            self.pakStream = stream
+            print("Using external bsp file.")
+        else:
+            self.stream = stream
+            self.pakStream = None
+
         self.pak = pak
         self.format = BSPFormat.GSRC
 
         # Store a base byte offset to the start of the BSP file
-        offset = stream.ptr
+        offset = self.stream.ptr
 
         numLumps = 0
 
         identStr, = struct.unpack("4s", self.stream.read(4))
+        #Python3 Bytearray to string convertion
+        if type(identStr) == type(b""):
+            identStr = identStr.decode("utf-8")
+
+        #print("identStr: " + identStr)
+
         if identStr == "IBSP":
             self.format = BSPFormat.IBSP
             numLumps = 19
@@ -103,12 +116,13 @@ class BSP(object):
             numLumps = 15
 
         version, = struct.unpack("I", self.stream.read(4))
-        print("BSP version " + str(version))
+        #print("BSP version " + str(version))
 
         # Version 30 of the old GoldSrc format is Half-Life (AKA: HL)
         if self.format is BSPFormat.GSRC and version is 30:
             self.format = BSPFormat.HL
 
+        #print("self.format: " + str(self.format))
         self.palette = self.loadGlobalPalette(palettePath)
 
         # Parse this BSPs lumps
@@ -116,6 +130,10 @@ class BSP(object):
         for i in range(0, numLumps):
             lump = struct.unpack("II", self.stream.read(8))
             lumps.append(lump)
+
+        #print("Lumps: " + str(len(lumps)))
+        #print(lumps)
+        #print("Stream pointer: " + str(offset))
 
         if self.format is BSPFormat.GSRC or self.format is BSPFormat.HL:
             self.textures = self.parseTextures(offset + lumps[2][0])
@@ -139,19 +157,26 @@ class BSP(object):
 
                     if (self.pak is not None) and (path in self.pak.directory):
                         offset = self.pak.directory[path][0]
-                        self.textures[texInfo.name] = self.parseTexture(BinaryStream(self.stream.binaryFile, offset))
+                        print("Offset: " + offset)
+                        self.textures[texInfo.name] = self.parseTexture(BinaryStream(self.pakStream.binaryFile, offset))
 
     def loadGlobalPalette(self, path):
         ptr = self.stream.ptr
-
+        #print("GLOBAL PALETTE CALLED")
+        #print("TRYING TO DUMP: " + path)
         if self.pak is not None:
             offset, size = self.pak.directory[path]
             if offset == None:
                 raise ValueError("Unable to find palette file in PAK with path: " + path)
 
-            self.stream.seek(offset)
-            data = self.stream.read(size)
-            self.stream.seek(ptr)
+            if self.pakStream is not None:
+                self.pakStream.seek(offset)
+                data = self.pakStream.read(size)
+                self.pakStream.seek(ptr)
+            else:
+                self.stream.seek(offset)
+                data = self.stream.read(size)
+                self.stream.seek(ptr)
 
             if path.endswith(".lmp"):
                 return Palette.fromLMP(data)
@@ -180,6 +205,7 @@ class BSP(object):
         textureGroups = {}
         for face in self.faces:
             texInfo = self.texInfos[face.texInfoID]
+            #print("Tex info name: " + str(texInfo.texID))
             texture = self.textures[texInfo.name if texInfo.name is not None else texInfo.texID]
 
             # Ignore trigger volumes as they're invisible
@@ -378,14 +404,19 @@ class BSP(object):
         if self.palette == None:
             raise ValueError("Attempt to parse a texture without an associated palette")
 
+        #self.stream.seek(offset)
         self.stream.seek(offset)
 
         numTextures, = struct.unpack("I", self.stream.read(4))
+        #print("Number of textures: " + str(numTextures))
         offsets = []
 
         for i in range (0, numTextures):
             textureOffset, = struct.unpack("I", self.stream.read(4))
             offsets.append(textureOffset)
+
+        #print("Texture offsets: " + str(offsets))
+        
 
         textures = []
         for i in range(0, numTextures):
@@ -396,7 +427,7 @@ class BSP(object):
 
     def parseTexture(self, stream):
         baseOffset = stream.ptr
-
+        #print("parseTexture pointer:" + str(baseOffset))
         if self.format is BSPFormat.IBSP:
             byteFormat = "32sIIIIII"
             byteLength = 56
